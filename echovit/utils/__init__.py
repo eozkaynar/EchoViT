@@ -47,7 +47,6 @@ def loadvideo(filename:str) -> np.ndarray:
         v[count, :, :]  = frame
 
     v = v.transpose((3, 0, 1, 2)) # (C, F, H, W)   
-
     return v
 
 def get_mean_and_std(dataset: torch.utils.data.Dataset,
@@ -83,8 +82,8 @@ def get_mean_and_std(dataset: torch.utils.data.Dataset,
     n = 0  # number of elements taken (should be equal to samples by end of for loop)
     s1 = 0.  # sum of elements along channels (ends up as np.array of dimension (channels,))
     s2 = 0.  # sum of squares of elements along channels (ends up as np.array of dimension (channels,))
-    for (filename,x, *_) in tqdm.tqdm(dataloader):
-        x = x[0]
+    for x, _ in tqdm.tqdm(dataloader):# x:video 
+        x = torch.as_tensor(x)
         x = x.transpose(0, 1).contiguous().view(3, -1)
         n += x.shape[1]
         s1 += torch.sum(x, dim=1).numpy()
@@ -96,3 +95,42 @@ def get_mean_and_std(dataset: torch.utils.data.Dataset,
     std = std.astype(np.float32)
 
     return mean, std
+
+
+def clip_collate(batch):
+    """
+    Collate function that converts a batch of samples—
+    each of which may contain one or more clips—
+    into a single tensor of shape (total_clips, C, T, H, W).
+
+    Args:
+        batch: list of tuples (video, target)
+               - video: np.ndarray of shape (C, T, H, W) or (N, C, T, H, W)
+               - target: label associated with the original video
+
+    Returns:
+        videos: torch.Tensor of shape (sum_N, C, T, H, W)
+        targets: list of targets, one per clip
+    """
+    videos = []
+    targets = []
+    filenames = []
+
+    for video, [filename, target] in batch:
+        # If video has 4 dimensions, it’s a single clip (C, T, H, W)
+        if video.ndim == 4:
+            videos.append(torch.from_numpy(video))
+            targets.append(target)
+            filenames.append(filename)
+        else:
+            # video.ndim == 5 → multiple clips (N, C, T, H, W)
+            # append each clip separately
+            for clip in video:
+                videos.append(torch.from_numpy(clip))
+                targets.append(target)
+                filenames.append(filename)
+
+    # Stack all clips into one batch dimension
+    videos = torch.stack(videos, dim=0)  # shape = (total_clips, C, T, H, W)
+    targets = torch.tensor(targets, dtype=torch.float32)
+    return videos, (filenames, targets) 
