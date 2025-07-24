@@ -13,10 +13,10 @@ from echovit.utils import loadvideo
 class ViViTecho(torchvision.datasets.VisionDataset):
     def __init__(self, root=None, split="train", 
                  mean=0., std=1.,
-                 length=16, period=2,
+                 length=32, period=2,
                  clips=1,
-                 external_data_dir=None, external_video_stats=None):
-        
+                 external_data_dir=None, external_video_stats=None,
+                 oversample=True):
         
 
         if root is None:
@@ -32,6 +32,7 @@ class ViViTecho(torchvision.datasets.VisionDataset):
         self.clips          = clips
         self.external_dir   = external_data_dir
         self.external_video_stats = external_video_stats
+        self.oversample     = oversample
 
          # Initialize attributes
         self.fnames     = []
@@ -106,18 +107,38 @@ class ViViTecho(torchvision.datasets.VisionDataset):
 
         # Retrieve the filename of the current video
         file_name = self.fnames[index]
+        EF        = float(self.outcome[index][self.header.index("EF")])
         target.append(self.fnames[index])  # Append the filename to the target list
-        target.append(float(self.outcome[index][self.header.index("EF")]))   #  Append EF value
+        target.append(EF/100)   #  Append EF value
 
         # Select clips from video based on starting indices
-        video = tuple(video[:, s + self.period * np.arange(length), :, :] for s in start)
+        video_all = tuple(video[:, s + self.period * np.arange(length), :, :] for s in start)
+
+    
+        is_minority = self.oversample and ((EF < 40) or (EF > 70)) and self.split=="TRAIN"
+
+        clips_per_video = 20 if is_minority else 1
 
         # If only one clip is selected, return it as a single tensor 
-        if self.clips == 1:
-            video = video[0]
-        else:
+        if clips_per_video == 1:
+            video = video_all[0]
+        elif clips_per_video == 20:
+            max_start = f - (length - 1) * self.period
+            clips_per_video = 20
+            replace = max_start < clips_per_video        # yetersiz pencere varsa tekrarlı seç
+            start_positions = np.random.choice(max_start,
+                                    clips_per_video,
+                                    replace=replace)
+
+            video_clips =  tuple(video[:, s + self.period * np.arange(length), :, :] for s in start_positions)
+            video = np.stack(video_clips)
+        elif self.clips == "all" and clips_per_video == 1:
             # Stack multiple clips into a single tensor with shape (N,C,F,H,W) 
-            video = np.stack(video)
+            video = np.stack(video_all)
+        else:
+            print("error in clips")
+            
+            
     
         return video, target
     
