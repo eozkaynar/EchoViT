@@ -41,7 +41,7 @@ class PositionalEncoder(nn.Module):
 class TransformerBlock(nn.Module):
     def __init__(self, embed_dim, num_heads, ff_dim):
         super(TransformerBlock, self).__init__()
-        self.attn  = nn.MultiheadAttention(embed_dim, num_heads, dropout=0.1)
+        self.attn  = nn.MultiheadAttention(embed_dim, num_heads, dropout=0.1,batch_first=True)
         self.norm1 = nn.LayerNorm(embed_dim)
         self.norm2 = nn.LayerNorm(embed_dim)
         self.ff    = nn.Sequential(
@@ -75,18 +75,18 @@ class ViViT(nn.Module):
         ])
         self.regressor = nn.Sequential(
             nn.LayerNorm(embed_dim),
-            nn.Linear(embed_dim, embed_dim // 2),  # İlk katman: Giriş boyutunu yarıya indirir
+            nn.Linear(embed_dim, embed_dim // 4),  # İlk katman: Giriş boyutunu yarıya indirir
             nn.GELU(),  # Aktivasyon fonksiyonu
-            nn.Dropout(p=0.3),  # Dropout, aşırı öğrenmeyi önlemek için
+            # nn.Dropout(p=0.3),  # Dropout, aşırı öğrenmeyi önlemek için
 
-            nn.Linear(embed_dim // 2, embed_dim // 4),  # İkinci katman: Boyutu tekrar küçültür
+            nn.Linear(embed_dim // 4, embed_dim // 8),  # İkinci katman: Boyutu tekrar küçültür
             nn.GELU(),
-            nn.Dropout(p=0.3),
+            # nn.Dropout(p=0.3),
 
-            nn.Linear(embed_dim // 4, embed_dim // 8),  # Üçüncü katman: Daha küçük bir boyut
+            nn.Linear(embed_dim // 8, embed_dim // 16),  # Üçüncü katman: Daha küçük bir boyut
             nn.GELU(),
 
-            nn.Linear(embed_dim // 8, 1)  # Çıkış katmanı: Tek bir değer döndürür
+            nn.Linear(embed_dim // 16, 1)  # Çıkış katmanı: Tek bir değer döndürür
         )
 
     def forward(self, x):
